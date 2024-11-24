@@ -1,6 +1,7 @@
 # Evaluate IR Results
 import pandas as pd
 import logging
+import numpy as np
 
 # input files in data folder:
 # system_results.csv: a file containing the retrieval results of a given IR system and
@@ -65,7 +66,7 @@ def p_10(qrels,sys_res):
             
             result.append({'system_number':int(sys),'query_number':int(query),'P@10':round(float(p_score),3)})
             # break
-        mean_p10=sum(sys_p10)/len(sys_p10)
+        mean_p10=sum(sys_p10)/len(sys_p10) if sys_p10 else 0
         result.append({'system_number':int(sys),'query_number':'mean','P@10':round(float(mean_p10),3)})
 
         # break
@@ -161,7 +162,7 @@ def ap(qrels,sys_res):
             n=len(relevant_docs)
             
             df_rank_n = query_res_df.sort_values('rank_of_doc')
-            retrieved_docs=df_rank_n['doc_number'].head(n).tolist()
+            retrieved_docs=df_rank_n['doc_number'].tolist()
 
             relevant_count=0
             matches=[]
@@ -186,6 +187,73 @@ def ap(qrels,sys_res):
 
 
 @timeit
+def ndcg(qrels,sys_res,cutoff):
+    '''
+
+    '''
+    result=[]
+    system_list=sys_res['system_number'].unique()
+    query_list= sys_res['query_number'].unique()
+
+    for sys in system_list:
+        sys_dcg=[]
+        for query in query_list:
+            query_res_df= sys_res[(sys_res['system_number'] == sys) & (sys_res['query_number'] == query)]
+            query_res_df=query_res_df.drop('score', axis=1).sort_values('rank_of_doc')
+            # print(query_res_df)
+
+            # print(qrels)
+
+            joined_df= pd.merge(query_res_df,qrels, left_on=['query_number','doc_number'],
+                                                    right_on=['query_id','doc_id'],
+                                                    how='left')
+            
+            joined_df=joined_df.drop(['query_id','doc_id'],axis=1)
+
+            joined_df['relevance']=joined_df['relevance'].fillna(0).astype(int)
+            
+            # print(joined_df)
+
+            # joined_df.to_csv('./data/output/test.csv', index=False, mode='w')
+            
+            dcg_df=joined_df.head(cutoff)
+            dcg_df['dg']= dcg_df['relevance']/np.log2(dcg_df['rank_of_doc'])
+            dcg_df['dg'] = dcg_df['dg'].replace([np.inf, -np.inf], np.nan).fillna(dcg_df['relevance'])
+
+            dcg_df['dcg_k']=dcg_df['dg'].cumsum()
+
+            ndcg_df=dcg_df
+
+            ndcg_df['iG']=ndcg_df['relevance'].sort_values(ascending=False).values
+            ndcg_df['iDG']=ndcg_df['iG']/np.log2(ndcg_df['rank_of_doc'])
+            ndcg_df['iDG']=ndcg_df['iDG'].replace([np.inf, -np.inf], np.nan).fillna(ndcg_df['iG'])
+            ndcg_df['iDCG_k']=ndcg_df['iDG'].cumsum()
+
+            ndcg_df['nDCG_k']=ndcg_df['dcg_k']/ndcg_df['iDCG_k']
+
+            ndcg_df['nDCG_k']=ndcg_df['nDCG_k'].replace([np.inf, -np.inf], np.nan).fillna(0)
+
+            # print(ndcg_df)
+
+            ndcg_score= round(float(ndcg_df['nDCG_k'].tail(1)),3)
+            
+            sys_dcg.append(ndcg_score)
+            result.append({'system_number':int(sys),'query_number':int(query),f'nDCG@{cutoff}':round(float(ndcg_score),3)})
+            # print(result)
+            # break
+        mean_ndcg_score= sum(sys_dcg)/len(sys_dcg)
+        result.append({'system_number':int(sys),'query_number':'mean',f'nDCG@{cutoff}':round(float(mean_ndcg_score),3)})
+
+        # print(result)
+        # break
+    res_df= pd.DataFrame(result)
+    return res_df
+
+        
+            
+
+
+@timeit
 def EVAL(qrels,sys_res):
     res_p10=p_10(qrels,sys_res)
     # print(res_p10)
@@ -201,9 +269,17 @@ def EVAL(qrels,sys_res):
     res_ap=ap(qrels,sys_res)
     res_df=pd.merge(res_df,res_ap,on=['system_number','query_number'])
 
+    res_dcg_10=ndcg(qrels,sys_res,10)
+    res_df=pd.merge(res_df,res_dcg_10,on=['system_number','query_number'])
+
+    res_dcg_20=ndcg(qrels,sys_res,20)
+    res_df=pd.merge(res_df,res_dcg_20,on=['system_number','query_number'])
 
 
-    print(res_df)
+
+
+    # print(res_df)
+    res_df.to_csv('./data/output/ir_eval.csv', index=False, mode='w')
 
 
     
