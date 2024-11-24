@@ -216,7 +216,7 @@ def ndcg(qrels,sys_res,cutoff):
 
             # joined_df.to_csv('./data/output/test.csv', index=False, mode='w')
             
-            dcg_df=joined_df.head(cutoff)
+            dcg_df=joined_df.head(cutoff).copy()
             dcg_df['dg']= dcg_df['relevance']/np.log2(dcg_df['rank_of_doc'])
             dcg_df['dg'] = dcg_df['dg'].replace([np.inf, -np.inf], np.nan).fillna(dcg_df['relevance'])
 
@@ -235,7 +235,7 @@ def ndcg(qrels,sys_res,cutoff):
 
             # print(ndcg_df)
 
-            ndcg_score= round(float(ndcg_df['nDCG_k'].tail(1)),3)
+            ndcg_score = round(float(ndcg_df['nDCG_k'].iloc[-1]), 3)
             
             sys_dcg.append(ndcg_score)
             result.append({'system_number':int(sys),'query_number':int(query),f'nDCG@{cutoff}':round(float(ndcg_score),3)})
