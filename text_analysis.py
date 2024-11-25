@@ -1,10 +1,20 @@
 # Lets Go!
 import Stemmer
+import numpy as np
 import logging
 import re
 from pprint import pprint
 import json
 import math
+import pyLDAvis
+import pyLDAvis.gensim_models as gensimvis
+logging.getLogger('gensim').setLevel(logging.WARNING)
+
+from gensim.test.utils import common_texts
+from gensim.corpora.dictionary import Dictionary
+from gensim.test.utils import datapath
+
+from gensim.models import LdaModel
 
 logging.basicConfig(
     level=logging.INFO,  # Set the logging level (e.g., INFO, DEBUG, WARNING)
@@ -290,6 +300,92 @@ def calculate_X2(index):
     return X2
             
 
+@timeit
+def topic_modelling(path):
+    data={}
+    with open(file_path,'r') as file:
+        with open(file_path,'r') as file:
+            for line in file:
+                part_line=line.split('\t')
+                clean_text=text_stemmer(stopword_remover(text_tokenizer(text_cleaner(part_line[1])),"./data/input/english_stop_list.txt"))
+                class_name=part_line[0]
+                if class_name not in data:
+                    data[class_name]=[]
+                
+                data[class_name].append(clean_text)
+    
+    logger.info("Data Parsed for all three classes")
+
+    common_texts=[]
+    for class_name in data:
+        for text in data[class_name]:
+            common_texts.append(text)
+    # print(len(common_texts))
+    # with open('res.json', 'w') as fp:
+    #     json.dump(common_texts, fp, indent=4)
+
+    # Create a corpus from a list of texts
+    common_dictionary = Dictionary(common_texts)
+
+    common_corpus = [common_dictionary.doc2bow(text) for text in common_texts]
+
+    # Train the model on the corpus.
+    # lda = LdaModel(common_corpus, num_topics=20)
+    # lda.save("lda_model_k20.gensim")
+
+    lda = LdaModel.load("lda_model_k20.gensim")
+    print("Model successfully loaded")
+
+
+    # topics = lda.print_topics(num_topics=20, num_words=10)
+    # for topic_id, topic_words in topics:
+    #     print(f"Topic {topic_id}: {topic_words}")
+    
+
+    # lda_vis = gensimvis.prepare(lda, common_corpus, common_dictionary)
+    # pyLDAvis.save_html(lda_vis, 'lda_visualization.html')
+
+    # pyLDAvis.show(lda_vis)
+
+    # Calculating doc-topic probabilities
+    class_topic_scores = {}
+    
+    for class_name in data:
+        corpus_dictionary=Dictionary(data[class_name])
+        corpus= [corpus_dictionary.doc2bow(text) for text in data[class_name]]
+
+        topic_scores =[0]*20
+
+        for doc_bow in corpus:
+            doc_topics = lda.get_document_topics(doc_bow, minimum_probability=0.0)
+            for topic_id,prob in doc_topics:
+                topic_scores[topic_id]+=prob
+
+        avg_topic_scores = [score / len(corpus) for score in topic_scores]
+
+        top_topic_id=int(np.argmax(avg_topic_scores))
+        top_score=avg_topic_scores[top_topic_id]
+                                   
+        top_10_tokens = lda.show_topic(top_topic_id, topn=10)
+        top_10_words = [(common_dictionary[int(word_id)], prob) for word_id, prob in top_10_tokens]
+        
+
+        class_topic_scores[class_name]={
+            "top_topic_id":top_topic_id,
+            "top_avg_score":top_score,
+            "token_list": top_10_tokens,
+            "word_lists": top_10_words
+        }
+    pprint(class_topic_scores)
+        
+
+        
+        
+           
+    
+
+
+
             
 
             
@@ -299,7 +395,6 @@ def calculate_X2(index):
 
 
 if __name__ == "__main__":
-    # Your code here
     file_path="./data/input/bible_and_quran.tsv"
 
     # data=parse_and_prepare_file(file_path)
@@ -314,17 +409,20 @@ if __name__ == "__main__":
     #     print(index[class_name]['word_count'])
     #     print(index[class_name]['doc_count'])
     
-    all_terms_MI=calculate_MI(index)
-    top_10_MI={}
-    for class_name in all_terms_MI:
-        top_10_MI[class_name]=sorted(all_terms_MI[class_name].items(), key=lambda item: item[1], reverse=True)[:10]
-    pprint(top_10_MI)
+    # all_terms_MI=calculate_MI(index)
+    # top_10_MI={}
+    # for class_name in all_terms_MI:
+    #     top_10_MI[class_name]=sorted(all_terms_MI[class_name].items(), key=lambda item: item[1], reverse=True)[:10]
+    # pprint(top_10_MI)
 
-    all_terms_X2=calculate_X2(index)
-    top_10_X2={}
-    for class_name in all_terms_X2:
-        top_10_X2[class_name]=sorted(all_terms_X2[class_name].items(), key=lambda item: item[1], reverse=True)[:10]
-    pprint(top_10_X2)
+    # all_terms_X2=calculate_X2(index)
+    # top_10_X2={}
+    # for class_name in all_terms_X2:
+    #     top_10_X2[class_name]=sorted(all_terms_X2[class_name].items(), key=lambda item: item[1], reverse=True)[:10]
+    # pprint(top_10_X2)
+
+
+    res=topic_modelling(file_path)
 
 
     
