@@ -194,7 +194,9 @@ def ndcg(qrels,sys_res,cutoff):
     result=[]
     system_list=sys_res['system_number'].unique()
     query_list= sys_res['query_number'].unique()
-
+    # system_list=[5]
+    # query_list=[8]
+    
     for sys in system_list:
         sys_dcg=[]
         for query in query_list:
@@ -222,9 +224,29 @@ def ndcg(qrels,sys_res,cutoff):
 
             dcg_df['dcg_k']=dcg_df['dg'].cumsum()
 
-            ndcg_df=dcg_df
 
-            ndcg_df['iG']=ndcg_df['relevance'].sort_values(ascending=False).values
+            qrels_df=qrels[qrels['query_id']==query].drop(['doc_id'],axis=1)
+            # print(qrels_df)
+            qrels_df['relevance']=qrels_df['relevance'].sort_values(ascending=False).values
+
+            if len(qrels_df)<cutoff:
+                padding_needed = cutoff-len(qrels_df)
+                padding = pd.DataFrame({"query_id": [query] * padding_needed,
+                                        "relevance": [0] * padding_needed
+                                       })
+            
+                qrels_df = pd.concat([qrels_df, padding], ignore_index=True)
+            
+            qrels_df=qrels_df.head(cutoff).drop(['query_id'],axis=1).reset_index(drop=True)
+            qrels_df.rename(columns={'relevance': 'iG'}, inplace=True)
+            # print(qrels_df)
+            ndcg_df = dcg_df.join(qrels_df) #join on index
+            
+            ndcg_df['iG']=ndcg_df['iG'].sort_values(ascending=False).values
+
+            # print(ndcg_df)
+
+            # ndcg_df['iG']=ndcg_df['relevance'].sort_values(ascending=False).values
             ndcg_df['iDG']=ndcg_df['iG']/np.log2(ndcg_df['rank_of_doc'])
             ndcg_df['iDG']=ndcg_df['iDG'].replace([np.inf, -np.inf], np.nan).fillna(ndcg_df['iG'])
             ndcg_df['iDCG_k']=ndcg_df['iDG'].cumsum()
